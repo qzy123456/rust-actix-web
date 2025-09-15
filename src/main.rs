@@ -8,8 +8,8 @@ mod routes;
 mod middleware;
 mod utils;
 
-// 从db模块导入必要的类型
-use middleware::{JsonLogger, JsonLoggerConfig, LogLevel};
+// 从middleware模块导入必要的类型
+use middleware::{JsonLogger, JsonLoggerConfig, LogLevel, JwtMiddleware};
 use serde_json::json;
 
 #[actix_web::main]
@@ -54,9 +54,16 @@ async fn main() -> std::io::Result<()> {
     // 注册JSON日志器为应用数据
     let app_data_logger = web::Data::new(json_logger.clone());
     
+    // 初始化JWT中间件 - 实际应用中应该从环境变量读取密钥
+    let jwt_secret = std::env::var("JWT_SECRET").unwrap_or_else(|_| "your-default-secret-key-1234567890".to_string());
+    let jwt_middleware = JwtMiddleware::new(jwt_secret);
+    let app_data_jwt = web::Data::new(jwt_middleware.clone());
+    
     // 启动HTTP服务器
     HttpServer::new(move || {
         App::new()
+            // 添加JWT中间件 - 放在错误处理中间件之前
+            .wrap(jwt_middleware.clone())
             // 添加错误处理中间件
             .wrap(middleware::ErrorHandler)
             // 添加日志中间件
@@ -65,6 +72,8 @@ async fn main() -> std::io::Result<()> {
             .app_data(web::Data::new(pool.clone()))
             // 注册JSON日志器作为应用数据
             .app_data(app_data_logger.clone())
+            // 注册JWT中间件作为应用数据
+            .app_data(app_data_jwt.clone())
             // 配置路由
             .configure(routes::config)
     })

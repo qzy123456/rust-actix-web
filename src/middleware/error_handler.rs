@@ -1,11 +1,10 @@
-use actix_web::{dev::Service, dev::ServiceRequest, dev::ServiceResponse, dev::Transform, Error}; 
+use actix_web::{web, HttpRequest, HttpResponse, Error, dev::{Service, ServiceRequest, ServiceResponse, Transform}};
 use futures::{Future, FutureExt}; 
 use std::pin::Pin; 
 use std::task::{Context, Poll}; 
 use std::fmt::Display; 
 use log::{error, warn, info}; 
-use backtrace::Backtrace; 
-use actix_web::{web, HttpRequest, HttpResponse}; 
+use backtrace::Backtrace;
 use serde_json::json; 
 use std::sync::{Arc, Mutex}; 
 use super::{JsonLogger, LogLevel}; 

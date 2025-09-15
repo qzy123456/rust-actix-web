@@ -1,6 +1,7 @@
 use actix_web::{HttpResponse, Responder, web};
 use crate::db::{DbPool, User, CreateUserRequest, UpdateUserRequest, ApiResponse, get_connection_or_return_error}; 
 use mysql::prelude::Queryable; 
+use serde_json;
 
 // 健康检查路由处理函数
 pub async fn health_check() -> impl Responder {
@@ -175,4 +176,17 @@ pub async fn delete_user(
         data: None,
     };
     Ok(HttpResponse::Ok().json(response))
+}
+
+// 配置主要路由
+pub fn config(cfg: &mut web::ServiceConfig) {
+    cfg.service(
+        web::scope("/api")
+            .route("/health", web::get().to(health_check))
+            .route("/users", web::post().to(create_user))
+            .route("/users", web::get().to(get_users))
+            .route("/users/{id}", web::get().to(get_user_by_id))
+            .route("/users/{id}", web::put().to(update_user))
+            .route("/users/{id}", web::delete().to(delete_user))
+    );
 }

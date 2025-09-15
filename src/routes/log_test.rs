@@ -2,6 +2,7 @@ use actix_web::{web, HttpRequest, HttpResponse};
 use std::sync::{Arc, Mutex}; 
 use crate::middleware::{JsonLogger, LogLevel}; 
 use serde_json::json; 
+use chrono;
 
 // 日志测试路由处理函数
 pub async fn test_json_logger(
@@ -46,4 +47,12 @@ pub async fn test_json_logger(
         "message": "JSON日志记录成功，请查看日志文件",
         "log_file": format!("logs/app_{}.log", chrono::Local::now().format("%Y%m%d"))
     })))
+}
+
+// 配置日志测试路由
+pub fn config(cfg: &mut web::ServiceConfig) {
+    cfg.service(
+        web::scope("/api")
+            .route("/test-logger", web::get().to(test_json_logger))
+    );
 }
