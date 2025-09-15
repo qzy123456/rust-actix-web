@@ -1,7 +1,11 @@
-use actix_web::{HttpResponse, Responder, web};
-use crate::db::{DbPool, User, CreateUserRequest, UpdateUserRequest, ApiResponse, get_connection_or_return_error}; 
+use std::sync::{Arc, Mutex};
+use actix_web::{HttpResponse, Responder, web, HttpRequest};
+use log::logger;
+use crate::db::{DbPool, User, CreateUserRequest, UpdateUserRequest, ApiResponse, get_connection_or_return_error};
 use mysql::prelude::Queryable; 
 use serde_json;
+use serde_json::json;
+use crate::middleware::{JsonLogger, LogLevel};
 
 // 健康检查路由处理函数
 pub async fn health_check() -> impl Responder {
@@ -178,6 +182,46 @@ pub async fn delete_user(
     Ok(HttpResponse::Ok().json(response))
 }
 
+pub async fn json_logger(
+    req: HttpRequest,
+    logger: web::Data<Arc<Mutex<JsonLogger>>>
+) -> impl Responder {
+    // 从路径中获取信息
+    let path = req.path().to_string();
+    let method = req.method().to_string();
+    print!("{},{}",path,method);
+    //尝试获取并锁定JSON日志器
+    if let Ok(mut logger_guard) = logger.lock() {
+        // 记录基本信息日志
+        let _ = logger_guard.log_with_data(
+            LogLevel::INFO,
+            "JSON日志测试: 基本信息",
+            json!({"path": path, "method": method})
+        );
+
+        // 记录警告级别的日志
+        let _ = logger_guard.log_with_data(
+            LogLevel::WARNING,
+            "JSON日志测试: 警告信息",
+            json!({"warning_type": "test_warning", "severity": "low"})
+        );
+
+        // 记录错误级别的日志
+        let _ = logger_guard.log_with_data(
+            LogLevel::ERROR,
+            "JSON日志测试: 错误信息",
+            json!({"error_type": "test_error", "code": "TEST_001", "description": "这是一个测试错误"})
+        );
+    }
+
+    // 返回成功响应
+    HttpResponse::Ok().json(serde_json::json!({
+        "status": "success",
+        "message": "JSON日志记录成功，请查看日志文件",
+        "log_file": format!("logs/app_{}.log", chrono::Local::now().format("%Y%m%d"))
+    }))
+}
+
 // 配置主要路由
 pub fn config(cfg: &mut web::ServiceConfig) {
     cfg.service(
@@ -188,5 +232,6 @@ pub fn config(cfg: &mut web::ServiceConfig) {
             .route("/users/{id}", web::get().to(get_user_by_id))
             .route("/users/{id}", web::put().to(update_user))
             .route("/users/{id}", web::delete().to(delete_user))
+            .route("/logger", web::get().to(json_logger))
     );
 }

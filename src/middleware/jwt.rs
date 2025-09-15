@@ -135,9 +135,8 @@ where
     fn call(&self, req: ServiceRequest) -> Self::Future {
         let path = req.path().to_string();
         let method = req.method().to_string();
-        
         // 跳过认证的路径（如登录、注册、健康检查等）
-        if path.starts_with("/api/auth") || path == "/health" || path == "/log-test" {
+        if path.starts_with("/api/auth") || path == "/api/health" || path == "/api/logger" {
             let fut = self.service.call(req);
             return Box::pin(async move { fut.await });
         }

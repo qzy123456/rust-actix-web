@@ -108,7 +108,6 @@ async fn main() -> std::io::Result<()> {
             .wrap(middleware::ErrorHandler)
             // 添加日志中间件
             .wrap(Logger::default())
-            //错误
             .wrap(
                 ErrorHandlers::new()  // 这里需要 new() 方法
                     .handler(StatusCode::INTERNAL_SERVER_ERROR, add_error_header)
