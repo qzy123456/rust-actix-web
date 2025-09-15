@@ -1,4 +1,5 @@
-use actix_web::{web, App, HttpServer, HttpRequest, middleware::Logger};
+use actix_web::{web, App, HttpServer, HttpRequest, middleware::Logger,dev,Result,middleware::ErrorHandlerResponse,middleware::ErrorHandlers};
+use actix_web::http::{header, StatusCode};
 use env_logger::Env;
 use std::sync::{Arc, Mutex};
 
@@ -107,6 +108,13 @@ async fn main() -> std::io::Result<()> {
             .wrap(middleware::ErrorHandler)
             // 添加日志中间件
             .wrap(Logger::default())
+            //错误
+            .wrap(
+                ErrorHandlers::new()  // 这里需要 new() 方法
+                    .handler(StatusCode::INTERNAL_SERVER_ERROR, add_error_header)
+                    .handler(StatusCode::NOT_FOUND, add_error_header)
+                    .handler(StatusCode::UNAUTHORIZED, add_error_header)
+            )
             // 注册数据库连接池作为应用数据
             .app_data(web::Data::new(pool.clone()))
             // 注册JSON日志器作为应用数据
@@ -123,4 +131,13 @@ async fn main() -> std::io::Result<()> {
     .bind("127.0.0.1:8080")?
     .run()
     .await
+}
+
+// 自定义一些错误头
+fn add_error_header<B>(mut res: dev::ServiceResponse<B>) -> Result<ErrorHandlerResponse<B>> {
+    res.response_mut().headers_mut().insert(
+        header::CONTENT_TYPE,
+        header::HeaderValue::from_static("application/json"),
+    );
+    Ok(ErrorHandlerResponse::Response(res.map_into_left_body()))
 }
