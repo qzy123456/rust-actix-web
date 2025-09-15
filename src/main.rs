@@ -7,6 +7,8 @@ mod db;
 mod routes;
 mod middleware;
 mod utils;
+mod cache;
+mod redis_pool;
 
 // 从middleware模块导入必要的类型
 use middleware::{JsonLogger, JsonLoggerConfig, LogLevel, JwtMiddleware};
@@ -59,6 +61,43 @@ async fn main() -> std::io::Result<()> {
     let jwt_middleware = JwtMiddleware::new(jwt_secret);
     let app_data_jwt = web::Data::new(jwt_middleware.clone());
     
+    // 初始化缓存
+    let cache = cache::init_cache();
+    let app_data_cache = web::Data::new(cache.clone());
+    
+    // 记录缓存初始化信息
+    {
+        let mut logger = json_logger.lock().unwrap();
+        logger.info("缓存初始化成功").unwrap();
+    }
+    
+    // 初始化Redis连接池
+    let redis_pool = match redis_pool::init_redis_pool() {
+        Ok(redis_pool) => {
+            // 记录Redis连接成功
+            {
+                let mut logger = json_logger.lock().unwrap();
+                logger.info("Redis连接池初始化成功").unwrap();
+            }
+            redis_pool
+        },
+        Err(err) => {
+            // 记录Redis连接失败
+            {
+                let mut logger = json_logger.lock().unwrap();
+                let error_data = json!({"error": format!("{:?}", err)});
+                logger.log_with_data(LogLevel::ERROR, "Redis连接池初始化失败", error_data).unwrap();
+            }
+            eprintln!("Failed to initialize Redis pool: {:?}", err);
+            // 注意：Redis不是必须的，所以这里不退出程序
+            // 我们将使用一个空的Arc，在实际使用时会检查连接池是否可用
+            Arc::new(None)
+        }
+    };
+    
+    // 注册Redis连接池作为应用数据
+    let app_data_redis = web::Data::new(redis_pool);
+    
     // 启动HTTP服务器
     HttpServer::new(move || {
         App::new()
@@ -74,6 +113,10 @@ async fn main() -> std::io::Result<()> {
             .app_data(app_data_logger.clone())
             // 注册JWT中间件作为应用数据
             .app_data(app_data_jwt.clone())
+            // 注册缓存作为应用数据
+            .app_data(app_data_cache.clone())
+            // 注册Redis连接池作为应用数据
+            .app_data(app_data_redis.clone())
             // 配置路由
             .configure(routes::config)
     })

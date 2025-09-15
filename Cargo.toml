@@ -17,3 +17,5 @@ backtrace = "0.3.68"
 log = "0.4.21"
 jsonwebtoken = "9.2.0"
 base64 = "0.21.0"
+deadpool-redis = "0.13.0"
+redis = { version = "0.24.0", features = ["tokio-comp"] }
