@@ -110,7 +110,7 @@ impl JsonLogger {
             for entry in entries {
                 if let Ok(entry) = entry {
                     if let Some(file_name) = entry.file_name().to_str() {
-                        if file_name.starts_with(&format!("{}_{}_", self.current_date, "app")) {
+                        if file_name.starts_with(&format!("{}-{}-", self.current_date, "app")) {
                             if let Some(index_str) = file_name.strip_prefix(&format!("{}_{}_", self.current_date, "app")).and_then(|s| s.strip_suffix(".log")) {
                                 if let Ok(index) = index_str.parse::<u32>() {
                                     if index > max_index {
@@ -153,7 +153,7 @@ impl JsonLogger {
     // 获取日志文件路径
     fn get_log_file_path(&self) -> String {
         Path::new(&self.config.log_dir)
-            .join(format!("{}_{}_{}.log", self.current_date, "app", self.current_file_index))
+            .join(format!("{}-{}-{}.log", self.current_date, "app", self.current_file_index))
             .to_str()
             .unwrap()
             .to_string()
