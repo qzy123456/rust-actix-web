@@ -64,7 +64,7 @@ where
         let headers_clone = headers.clone();
         
         // 添加明确的中间件调用日志
-        info!("[ERROR MIDDLEWARE] 收到请求: {} {}", method, path);
+        //info!("[ERROR MIDDLEWARE] 收到请求: {} {}", method, path);
         
         // 检查是否有JSON日志器
         let json_logger = req.app_data::<web::Data<Arc<Mutex<JsonLogger>>>>().cloned();
@@ -81,11 +81,11 @@ where
                         .collect::<serde_json::Value>()
                 });
                 
-                let _ = logger_guard.log_with_data(
-                    LogLevel::INFO, 
-                    "[ERROR MIDDLEWARE] 收到请求", 
-                    request_data
-                );
+                // let _ = logger_guard.log_with_data(
+                //     LogLevel::INFO,
+                //     "[ERROR MIDDLEWARE] 收到请求",
+                //     request_data
+                // );
             }
         }
         
@@ -93,6 +93,12 @@ where
         let fut = self.service.call(req);
         
         Box::pin(fut.then(move |result| async move {
+            // 特殊处理不需要日志记录的请求
+            if path == "/favicon.ico" || path == "/.well-known/appspecific/com.chrome.devtools.json" {
+                // 直接返回结果，不进行特殊日志记录
+                return result;
+            }
+            
             // 添加日志记录result的类型，确认中间件在处理结果
             info!("[ERROR MIDDLEWARE] 处理请求结果: {} {}, 结果类型: {}", method, path, if result.is_ok() { "成功" } else { "失败" });
             
