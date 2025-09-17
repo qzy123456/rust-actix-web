@@ -93,12 +93,3 @@ pub async fn redis_set(
     };
     Ok(HttpResponse::Ok().json(response))
 }
-
-// 配置Redis路由
-pub fn config(cfg: &mut web::ServiceConfig) {
-    cfg.service(
-        web::scope("/api/redis")
-            .route("/{key}", web::get().to(redis_get))
-            .route("/set", web::post().to(redis_set))
-    );
-}

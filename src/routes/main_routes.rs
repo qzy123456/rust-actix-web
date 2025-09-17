@@ -6,6 +6,100 @@ use mysql::prelude::Queryable;
 use serde_json;
 use serde_json::json;
 use crate::middleware::{JsonLogger, LogLevel};
+// 导入rbatis_routes模块以使用其中的方法
+use crate::routes::{rbatis_routes,auth_routes,cache_routes,redis_routes};
+// 导入其他模块需要的类型
+use serde::{Deserialize, Serialize};
+use std::time::Duration;
+use log::{info, error};
+use crate::middleware::JwtMiddleware;
+use crate::cache::Cache;
+use std::sync::Arc as StdArc;
+use crate::redis_pool;
+use crate::rbatis_pool::RBATIS_POOL;
+use rbatis::crud;
+use rbs::value::Value;
+
+// 登录请求结构体
+#[derive(Debug, Deserialize)]
+pub struct LoginRequest {
+    pub phone: String, 
+    pub password: String,
+}
+
+// 登录响应结构体
+#[derive(Debug, Serialize)]
+pub struct LoginResponse {
+    pub token: String, 
+    pub token_type: String, 
+    pub expires_in: u64, 
+    pub user_id: u64, 
+    pub phone: String, 
+}
+
+// 注册请求结构体
+#[derive(Debug, Deserialize)]
+pub struct RegisterRequest {
+    pub phone: String, 
+    pub password: String, 
+    pub name: Option<String>, 
+}
+
+// 注册响应结构体
+#[derive(Debug, Serialize)]
+pub struct RegisterResponse {
+    pub success: bool, 
+    pub user_id: u64, 
+    pub phone: String, 
+}
+
+// 设置缓存请求结构
+#[derive(Debug, Deserialize)]
+pub struct SetCacheRequest {
+    key: String,
+    value: String,
+    ttl: Option<u64>,
+}
+
+// 缓存状态响应结构
+#[derive(Debug, Serialize)]
+pub struct CacheStatusResponse {
+    status: String,
+    item_count: usize,
+    message: String,
+}
+
+// Redis操作请求体结构
+#[derive(Debug, Deserialize)]
+pub struct RedisSetRequest {
+    key: String,
+    value: String,
+    expiry_seconds: Option<u64>
+}
+
+// Redis操作响应结构
+#[derive(Debug, Serialize)]
+pub struct RedisResponse {
+    status: String,
+    message: String,
+    data: Option<String>
+}
+
+// Rbatis User 结构体
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct RbatisUser {
+    pub id: Option<u64>,
+    pub phone: Option<String>,
+    pub name: Option<String>,
+    pub avatar: Option<u8>,
+    pub create_time: Option<u32>,
+    pub first_change: Option<u8>,
+    pub is_business: Option<u8>,
+    pub is_ban: Option<u8>,
+}
+
+// 为 RbatisUser 自动生成 CRUD 方法
+crud!(RbatisUser{});
 
 // 健康检查路由处理函数
 pub async fn health_check() -> impl Responder {
@@ -233,5 +327,30 @@ pub fn config(cfg: &mut web::ServiceConfig) {
             .route("/users/{id}", web::put().to(update_user))
             .route("/users/{id}", web::delete().to(delete_user))
             .route("/logger", web::get().to(json_logger))
+    ).service(
+        web::scope("/rbatis")
+            .route("/health", web::get().to(rbatis_routes::rbatis_health_check))
+            .route("/users", web::get().to(rbatis_routes::rbatis_get_users))
+            .route("/users", web::post().to(rbatis_routes::rbatis_create_user))
+            .route("/users/{id}", web::get().to(rbatis_routes::rbatis_get_user_by_id))
+            .route("/users/{id}", web::put().to(rbatis_routes::rbatis_update_user))
+            .route("/users/{id}", web::delete().to(rbatis_routes::rbatis_delete_user))
+    )
+        .service(
+        web::scope("/auth")
+            .route("/login", web::post().to(auth_routes::login))
+            .route("/register", web::post().to(auth_routes::register))
+            .route("/me", web::get().to(auth_routes::get_current_user))
+    ).service(
+        web::scope("/cache")
+            .route("/set", web::post().to(cache_routes::set_cache))
+            .route("/get/{key}", web::get().to(cache_routes::get_cache))
+            .route("/delete/{key}", web::delete().to(cache_routes::delete_cache))
+            .route("/status", web::get().to(cache_routes::get_cache_status))
+            .route("/clear", web::delete().to(cache_routes::clear_cache))
+    ).service(
+        web::scope("/redis")
+            .route("/{key}", web::get().to(redis_routes::redis_get))
+            .route("/set", web::post().to(redis_routes::redis_set))
     );
 }

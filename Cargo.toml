@@ -19,6 +19,12 @@ jsonwebtoken = "9.2.0"
 base64 = "0.21.0"
 deadpool-redis = "0.13.0"
 redis = { version = "0.24.0", features = ["tokio-comp"] }
+rbs = { version = "4.5"}
+rbatis = { version = "4.5"}
+rbdc-mysql={version="4.5"}
+tokio = { version = "1", features = ["full"] }
+fast_log = "1.6"
+lazy_static = "1.4.0"
 
 [build]
 incremental = true  # 增量编译

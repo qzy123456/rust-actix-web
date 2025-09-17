@@ -146,17 +146,3 @@ pub async fn get_current_user(req: HttpRequest) -> impl Responder {
         HttpResponse::Unauthorized().json(serde_json::json!({"error": "User not authenticated"}))
     }
 }
-
-// 配置身份验证路由
-pub fn config(cfg: &mut web::ServiceConfig) {
-    cfg
-        .service(
-            web::scope("/api/auth")
-                .route("/login", web::post().to(login))
-                .route("/register", web::post().to(register))
-        )
-        .service(
-            web::scope("/api/user")
-                .route("/me", web::get().to(get_current_user))
-        );
-}

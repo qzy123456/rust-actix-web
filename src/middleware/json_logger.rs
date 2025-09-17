@@ -104,8 +104,7 @@ impl JsonLogger {
         
         // 查找当前日期的最大文件索引
         let mut max_index = 0;
-        let pattern = format!("{}_{}_*.log", self.current_date, "app");
-        
+
         if let Ok(entries) = fs::read_dir(&self.config.log_dir) {
             for entry in entries {
                 if let Ok(entry) = entry {

@@ -10,16 +10,19 @@ mod middleware;
 mod utils;
 mod cache;
 mod redis_pool;
+// 添加 rbatis 模块
+mod rbatis_pool;
 
 // 从middleware模块导入必要的类型
-use middleware::{JsonLogger, JsonLoggerConfig, LogLevel, JwtMiddleware};
+use middleware::{JsonLogger, JsonLoggerConfig, LogLevel, JwtMiddleware, Claims};
 use serde_json::json;
 
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
     // 初始化标准日志
-    env_logger::init_from_env(Env::default().default_filter_or("info"));
-    
+    //env_logger::init_from_env(Env::default().default_filter_or("info"));
+    // 配置日志,用于rbatis,可以打印mysql查询sql
+    fast_log::init(fast_log::Config::new().console()).expect("rbatis初始化失败");
     // 初始化JSON日志器
     let json_logger = Arc::new(Mutex::new(
         JsonLogger::new(JsonLoggerConfig::default())
@@ -32,27 +35,27 @@ async fn main() -> std::io::Result<()> {
         logger.info("服务器开始初始化").unwrap();
     }
     
-    // 初始化数据库连接池
-    let pool = match db::init_db_pool() {
-        Ok(pool) => {
-            // 记录数据库连接成功
-            {
-                let mut logger = json_logger.lock().unwrap();
-                logger.info("数据库连接池初始化成功").unwrap();
-            }
-            pool
-        },
-        Err(err) => {
-            // 记录数据库连接失败
-            {
-                let mut logger = json_logger.lock().unwrap();
-                let error_data = json!({"error": format!("{:?}", err)});
-                logger.log_with_data(LogLevel::FATAL, "数据库连接池初始化失败", error_data).unwrap();
-            }
-            eprintln!("Failed to initialize database pool: {:?}", err);
-            std::process::exit(1);
-        }
-    };
+    // 注释掉原有的数据库连接池初始化代码
+    // let pool = match db::init_db_pool() {
+    //     Ok(pool) => {
+    //         // 记录数据库连接成功
+    //         {
+    //             let mut logger = json_logger.lock().unwrap();
+    //             logger.info("数据库连接池初始化成功").unwrap();
+    //         }
+    //         pool
+    //     },
+    //     Err(err) => {
+    //         // 记录数据库连接失败
+    //         {
+    //             let mut logger = json_logger.lock().unwrap();
+    //             let error_data = json!({"error": format!("{:?}", err)});
+    //             logger.log_with_data(LogLevel::FATAL, "数据库连接池初始化失败", error_data).unwrap();
+    //         }
+    //         eprintln!("Failed to initialize database pool: {:?}", err);
+    //         std::process::exit(1);
+    //     }
+    // };
     
     // 注册JSON日志器为应用数据
     let app_data_logger = web::Data::new(json_logger.clone());
@@ -114,8 +117,8 @@ async fn main() -> std::io::Result<()> {
                     .handler(StatusCode::NOT_FOUND, add_error_header)
                     .handler(StatusCode::UNAUTHORIZED, add_error_header)
             )
-            // 注册数据库连接池作为应用数据
-            .app_data(web::Data::new(pool.clone()))
+            // 注释掉原有的数据库连接池注册
+            // .app_data(web::Data::new(pool.clone()))
             // 注册JSON日志器作为应用数据
             .app_data(app_data_logger.clone())
             // 注册JWT中间件作为应用数据

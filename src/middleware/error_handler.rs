@@ -81,11 +81,11 @@ where
                         .collect::<serde_json::Value>()
                 });
                 
-                // let _ = logger_guard.log_with_data(
-                //     LogLevel::INFO,
-                //     "[ERROR MIDDLEWARE] 收到请求",
-                //     request_data
-                // );
+                let _ = logger_guard.log_with_data(
+                    LogLevel::INFO,
+                    "[ERROR MIDDLEWARE] 收到请求",
+                    request_data
+                );
             }
         }
         

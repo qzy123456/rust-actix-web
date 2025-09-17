@@ -116,30 +116,3 @@ pub async fn clear_cache(
         })),
     }
 }
-
-// 配置缓存路由
-pub fn config(cfg: &mut web::ServiceConfig) {
-    let scope = web::scope("/cache")
-        .service(
-            web::resource("/set")
-                .route(web::post().to(set_cache))
-        )
-        .service(
-            web::resource("/get/{key}")
-                .route(web::get().to(get_cache))
-        )
-        .service(
-            web::resource("/delete/{key}")
-                .route(web::delete().to(delete_cache))
-        )
-        .service(
-            web::resource("/status")
-                .route(web::get().to(get_cache_status))
-        )
-        .service(
-            web::resource("/clear")
-                .route(web::delete().to(clear_cache))
-        );
-    
-    cfg.service(scope);
-}
