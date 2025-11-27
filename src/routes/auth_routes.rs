@@ -9,8 +9,7 @@ use crate::db::{DbPool, get_connection_or_return_error};
 // 登录请求结构体
 #[derive(Debug, Deserialize)]
 pub struct LoginRequest {
-    pub phone: String, 
-    pub password: String, // 在实际应用中应该使用加密密码
+    pub phone: String,
 }
 
 // 登录响应结构体
@@ -48,7 +47,7 @@ pub async fn login(
     let mut conn = get_connection_or_return_error(&pool).await?;
     
     // 查找用户 - 在实际应用中应该使用参数化查询防止SQL注入
-    let query = format!("SELECT id, phone FROM users WHERE phone = '{}' AND password = '{}' LIMIT 1", req.phone, req.password);
+    let query = format!("SELECT id, phone FROM users WHERE phone = '{}' LIMIT 1", req.phone);
     
     match conn.query_first::<(u64, String), &str>(&query) {
         Ok(Some((user_id, phone))) => {

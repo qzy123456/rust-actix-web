@@ -10,12 +10,15 @@ mod middleware;
 mod utils;
 mod cache;
 mod redis_pool;
+mod seaorm_entity;
 // 添加 rbatis 模块
 mod rbatis_pool;
 
 // 从middleware模块导入必要的类型
 use middleware::{JsonLogger, JsonLoggerConfig, LogLevel, JwtMiddleware, Claims};
 use serde_json::json;
+use sea_orm::Database;
+use std::env;
 
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
@@ -36,26 +39,28 @@ async fn main() -> std::io::Result<()> {
     }
     
     // 注释掉原有的数据库连接池初始化代码
-    // let pool = match db::init_db_pool() {
-    //     Ok(pool) => {
-    //         // 记录数据库连接成功
-    //         {
-    //             let mut logger = json_logger.lock().unwrap();
-    //             logger.info("数据库连接池初始化成功").unwrap();
-    //         }
-    //         pool
-    //     },
-    //     Err(err) => {
-    //         // 记录数据库连接失败
-    //         {
-    //             let mut logger = json_logger.lock().unwrap();
-    //             let error_data = json!({"error": format!("{:?}", err)});
-    //             logger.log_with_data(LogLevel::FATAL, "数据库连接池初始化失败", error_data).unwrap();
-    //         }
-    //         eprintln!("Failed to initialize database pool: {:?}", err);
-    //         std::process::exit(1);
-    //     }
-    // };
+    // 初始化数据库连接池（用于 `auth` 等路由）
+    let pool = match db::init_db_pool() {
+        Ok(pool) => {
+            // 记录数据库连接成功
+            {
+                let mut logger = json_logger.lock().unwrap();
+                logger.info("数据库连接池初始化成功").unwrap();
+            }
+            pool
+        },
+        Err(err) => {
+            // 记录数据库连接失败
+            {
+                let mut logger = json_logger.lock().unwrap();
+                let error_data = json!({"error": format!("{:?}", err)});
+                // 使用 ERROR 而非 FATAL，以便程序可继续运行（取决于你的策略）
+                logger.log_with_data(LogLevel::ERROR, "数据库连接池初始化失败", error_data).unwrap();
+            }
+            eprintln!("Failed to initialize database pool: {:?}", err);
+            std::process::exit(1);
+        }
+    };
     
     // 注册JSON日志器为应用数据
     let app_data_logger = web::Data::new(json_logger.clone());
@@ -101,10 +106,39 @@ async fn main() -> std::io::Result<()> {
     
     // 注册Redis连接池作为应用数据
     let app_data_redis = web::Data::new(redis_pool);
+
+    // 注册 MySQL 连接池为应用数据（供 auth_routes 等使用）
+    let app_data_pool = web::Data::new(pool.clone());
+
+    // 尝试创建 SeaORM 数据库连接（可选）
+    dotenvy::dotenv().ok();
+    // 只读取一次 DATABASE_URL 并基于其尝试连接
+    let app_data_db = if let Ok(db_url) = env::var("DATABASE_URL") {
+        println!("Database URL: {}", db_url);
+        match Database::connect(&db_url).await {
+            Ok(db_conn) => {
+                // 记录连接成功
+                if let Ok(mut logger) = json_logger.lock() {
+                    let _ = logger.info(&format!("SeaORM connected: {}", db_url));
+                }
+                Some(web::Data::new(db_conn))
+            }
+            Err(e) => {
+                if let Ok(mut logger) = json_logger.lock() {
+                    let _ = logger.log_with_data(LogLevel::ERROR, "SeaORM 连接失败", json!({"error": format!("{}", e)}));
+                }
+                None
+            }
+        }
+    } else {
+        // 未设置 DATABASE_URL，则不注入 SeaORM 连接
+        None
+    };
     
     // 启动HTTP服务器
     HttpServer::new(move || {
-        App::new()
+        // 先构建基础的 App
+        let mut app = App::new()
             // 添加JWT中间件 - 放在错误处理中间件之前
             .wrap(jwt_middleware.clone())
             // 添加错误处理中间件
@@ -117,8 +151,6 @@ async fn main() -> std::io::Result<()> {
                     .handler(StatusCode::NOT_FOUND, add_error_header)
                     .handler(StatusCode::UNAUTHORIZED, add_error_header)
             )
-            // 注释掉原有的数据库连接池注册
-            // .app_data(web::Data::new(pool.clone()))
             // 注册JSON日志器作为应用数据
             .app_data(app_data_logger.clone())
             // 注册JWT中间件作为应用数据
@@ -127,8 +159,16 @@ async fn main() -> std::io::Result<()> {
             .app_data(app_data_cache.clone())
             // 注册Redis连接池作为应用数据
             .app_data(app_data_redis.clone())
-            // 配置路由
-            .configure(routes::config)
+            // 注册 MySQL 连接池作为应用数据
+            .app_data(app_data_pool.clone());
+
+        // 如果存在 SeaORM 连接，则注入
+        if let Some(db_data) = app_data_db.clone() {
+            app = app.app_data(db_data);
+        }
+
+        // 配置路由
+        app.configure(routes::config)
     })
     .bind("127.0.0.1:8080")?
     .run()
