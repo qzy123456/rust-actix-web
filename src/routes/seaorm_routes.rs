@@ -4,10 +4,11 @@ use serde_json::Value;
 use actix_web::body::BoxBody;
 use actix_web::http::StatusCode;
 
-use sea_orm::{ActiveModelTrait, DatabaseConnection, EntityTrait, PaginatorTrait, Set};
+use sea_orm::{ActiveModelTrait, DatabaseConnection, EntityTrait, PaginatorTrait, Set, QueryFilter, ColumnTrait};
 use serde::Deserialize;
 
 use crate::entity::{ActiveModel, Entity as User, Model};
+use crate::entity::orders;
 
 #[derive(Serialize)]
 struct Meta {
@@ -204,6 +205,37 @@ async fn delete_user(db: web::Data<DatabaseConnection>, id: web::Path<u64>) -> i
     }
 }
 
+// --------------------------
+// 6. 查询用户及其订单 (关联查询)
+// --------------------------
+#[get("/users/{id}/orders")]
+async fn get_user_with_orders(
+    db: web::Data<DatabaseConnection>,
+    id: web::Path<u64>,
+) -> impl Responder {
+    let uid = id.into_inner();
+
+    // 先查用户
+    match User::find_by_id(uid).one(db.get_ref()).await {
+        Ok(Some(user)) => {
+            // 明确按 uid 查询订单（不依赖 DeriveRelation 的宏实现）
+            match orders::Entity::find()
+                .filter(orders::Column::Uid.eq(uid))
+                .all(db.get_ref())
+                .await
+            {
+                Ok(ord_list) => {
+                    let resp = serde_json::json!({"user": user, "orders": ord_list});
+                    ApiResponse::success(resp)
+                }
+                Err(err) => ApiResponse::error(500, err.to_string()),
+            }
+        }
+        Ok(None) => ApiResponse::error(404, "User not found"),
+        Err(err) => ApiResponse::error(500, err.to_string()),
+    }
+}
+
 // 注册路由到 /seaorm
 pub fn config(cfg: &mut web::ServiceConfig) {
     cfg.service(
@@ -213,5 +245,6 @@ pub fn config(cfg: &mut web::ServiceConfig) {
             .service(get_users_page)
             .service(update_user)
             .service(delete_user)
+            .service(get_user_with_orders)
     );
 }

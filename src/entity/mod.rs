@@ -1,4 +1,5 @@
 // src/entity/mod.rs
+pub mod orders;
 pub mod users;
 
 // 统一导出常用类型
