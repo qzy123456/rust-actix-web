@@ -7,7 +7,7 @@ use actix_web::http::StatusCode;
 use sea_orm::{ActiveModelTrait, DatabaseConnection, EntityTrait, PaginatorTrait, Set};
 use serde::Deserialize;
 
-use crate::seaorm_entity::{ActiveModel, Entity as User, Model};
+use crate::entity::{ActiveModel, Entity as User, Model};
 
 #[derive(Serialize)]
 struct Meta {

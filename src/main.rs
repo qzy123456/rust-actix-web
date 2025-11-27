@@ -10,7 +10,7 @@ mod middleware;
 mod utils;
 mod cache;
 mod redis_pool;
-mod seaorm_entity;
+mod entity;
 // 添加 rbatis 模块
 mod rbatis_pool;
 
@@ -110,14 +110,12 @@ async fn main() -> std::io::Result<()> {
     // 注册 MySQL 连接池为应用数据（供 auth_routes 等使用）
     let app_data_pool = web::Data::new(pool.clone());
 
-    // 尝试创建 SeaORM 数据库连接（可选）
+    // 尝试创建 SeaORM 数据库连接（可选），通过一次读取 `DATABASE_URL`
     dotenvy::dotenv().ok();
-    // 只读取一次 DATABASE_URL 并基于其尝试连接
     let app_data_db = if let Ok(db_url) = env::var("DATABASE_URL") {
         println!("Database URL: {}", db_url);
         match Database::connect(&db_url).await {
             Ok(db_conn) => {
-                // 记录连接成功
                 if let Ok(mut logger) = json_logger.lock() {
                     let _ = logger.info(&format!("SeaORM connected: {}", db_url));
                 }
@@ -131,7 +129,6 @@ async fn main() -> std::io::Result<()> {
             }
         }
     } else {
-        // 未设置 DATABASE_URL，则不注入 SeaORM 连接
         None
     };
     

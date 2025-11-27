@@ -1,4 +1,4 @@
-// src/seaorm_entity.rs
+// src/entity/users.rs
 use sea_orm::entity::prelude::*;
 use serde::{Deserialize, Serialize};
 
