@@ -1,7 +1,9 @@
-use actix_web::{web, HttpResponse, Responder};
+use actix_web::{web, Responder};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use crate::cache::Cache;
+// 导入通用的 ApiResponse
+use crate::common::ApiResponse;
 
 // 设置缓存请求结构
 #[derive(Debug, Deserialize)]
@@ -11,28 +13,16 @@ pub struct SetCacheRequest {
     ttl: Option<u64>, // 可选的过期时间（秒）
 }
 
-// 缓存状态响应结构
-#[derive(Debug, Serialize)]
-pub struct CacheStatusResponse {
-    status: String,
-    item_count: usize,
-    message: String,
-}
-
 // 设置缓存项
 pub async fn set_cache(
     cache: web::Data<Cache>,
     request: web::Json<SetCacheRequest>,
 ) -> impl Responder {
     match cache.set(&request.key, request.value.clone(), request.ttl) {
-        Ok(_) => HttpResponse::Ok().json(json!({
-            "status": "success",
+        Ok(_) => ApiResponse::success(json!({
             "message": format!("缓存项 '{}' 设置成功", request.key)
         })),
-        Err(err) => HttpResponse::InternalServerError().json(json!({
-            "status": "error",
-            "message": format!("设置缓存失败: {}", err)
-        })),
+        Err(err) => ApiResponse::<serde_json::Value>::error(500, format!("设置缓存失败: {}", err)),
     }
 }
 
@@ -43,19 +33,12 @@ pub async fn get_cache(
 ) -> impl Responder {
     let key = path.into_inner();
     match cache.get(&key) {
-        Ok(Some(value)) => HttpResponse::Ok().json(json!({
-            "status": "success",
+        Ok(Some(value)) => ApiResponse::success(json!({
             "key": key,
             "value": value
         })),
-        Ok(None) => HttpResponse::NotFound().json(json!({
-            "status": "error",
-            "message": format!("缓存项 '{}' 不存在", key)
-        })),
-        Err(err) => HttpResponse::InternalServerError().json(json!({
-            "status": "error",
-            "message": format!("获取缓存失败: {}", err)
-        })),
+        Ok(None) => ApiResponse::<serde_json::Value>::error(404, format!("缓存项 '{}' 不存在", key)),
+        Err(err) => ApiResponse::<serde_json::Value>::error(500, format!("获取缓存失败: {}", err)),
     }
 }
 
@@ -66,18 +49,11 @@ pub async fn delete_cache(
 ) -> impl Responder {
     let key = path.into_inner();
     match cache.remove(&key) {
-        Ok(true) => HttpResponse::Ok().json(json!({
-            "status": "success",
+        Ok(true) => ApiResponse::success(json!({
             "message": format!("缓存项 '{}' 删除成功", key)
         })),
-        Ok(false) => HttpResponse::NotFound().json(json!({
-            "status": "error",
-            "message": format!("缓存项 '{}' 不存在", key)
-        })),
-        Err(err) => HttpResponse::InternalServerError().json(json!({
-            "status": "error",
-            "message": format!("删除缓存失败: {}", err)
-        })),
+        Ok(false) => ApiResponse::<serde_json::Value>::error(404, format!("缓存项 '{}' 不存在", key)),
+        Err(err) => ApiResponse::<serde_json::Value>::error(500, format!("删除缓存失败: {}", err)),
     }
 }
 
@@ -87,17 +63,14 @@ pub async fn get_cache_status(
 ) -> impl Responder {
     match cache.len() {
         Ok(count) => {
-            let response = CacheStatusResponse {
-                status: "success".to_string(),
-                item_count: count,
-                message: "缓存状态正常".to_string(),
-            };
-            HttpResponse::Ok().json(response)
+            let response_data = json!({
+                "status": "success",
+                "item_count": count,
+                "message": "缓存状态正常"
+            });
+            ApiResponse::success(response_data)
         },
-        Err(err) => HttpResponse::InternalServerError().json(json!({
-            "status": "error",
-            "message": format!("获取缓存状态失败: {}", err)
-        })),
+        Err(err) => ApiResponse::<serde_json::Value>::error(500, format!("获取缓存状态失败: {}", err)),
     }
 }
 
@@ -106,13 +79,9 @@ pub async fn clear_cache(
     cache: web::Data<Cache>,
 ) -> impl Responder {
     match cache.clear() {
-        Ok(_) => HttpResponse::Ok().json(json!({
-            "status": "success",
+        Ok(_) => ApiResponse::success(json!({
             "message": "缓存已清空"
         })),
-        Err(err) => HttpResponse::InternalServerError().json(json!({
-            "status": "error",
-            "message": format!("清空缓存失败: {}", err)
-        })),
+        Err(err) => ApiResponse::<serde_json::Value>::error(500, format!("清空缓存失败: {}", err)),
     }
 }

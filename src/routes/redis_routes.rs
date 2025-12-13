@@ -3,6 +3,8 @@ use serde::{Deserialize, Serialize};
 use serde_json::json;
 use std::sync::Arc;
 use crate::redis_pool;
+// 导入通用的 ApiResponse
+use crate::common::ApiResponse;
 
 // Redis操作请求体结构
 #[derive(Debug, Deserialize)]
@@ -41,14 +43,14 @@ pub async fn redis_get(
                     message: format!("Key '{}' found", key),
                     data: Some(val),
                 };
-                Ok(HttpResponse::Ok().json(response))
+                Ok(HttpResponse::Ok().json(ApiResponse::success(response)))
             } else {
                 let response = RedisResponse {
                     status: "not_found".to_string(),
                     message: format!("Key '{}' not found", key),
                     data: None,
                 };
-                Ok(HttpResponse::NotFound().json(response))
+                Ok(HttpResponse::NotFound().json(ApiResponse::<serde_json::Value>::error(404, response.message)))
             }
         },
         Err(e) => {
@@ -57,7 +59,7 @@ pub async fn redis_get(
                 message: format!("Failed to get key '{}': {}", key, e),
                 data: None,
             };
-            Ok(HttpResponse::InternalServerError().json(response))
+            Ok(HttpResponse::InternalServerError().json(ApiResponse::<serde_json::Value>::error(500, response.message)))
         }
     }
 }
@@ -83,7 +85,7 @@ pub async fn redis_set(
             message: format!("Failed to set key '{}': {}", key, e),
             data: None,
         };
-        return Ok(HttpResponse::InternalServerError().json(response));
+        return Ok(HttpResponse::InternalServerError().json(ApiResponse::<serde_json::Value>::error(500, response.message)));
     }
     
     let response = RedisResponse {
@@ -91,5 +93,5 @@ pub async fn redis_set(
         message: format!("Key '{}' set successfully with expiry of {} seconds", key, expiry_seconds),
         data: Some(value.clone()),
     };
-    Ok(HttpResponse::Ok().json(response))
+    Ok(HttpResponse::Ok().json(ApiResponse::success(response)))
 }

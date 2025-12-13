@@ -7,14 +7,6 @@ use std::sync::Arc;
 use actix_web::{web, error, Error};
 use serde::{Deserialize, Serialize};
 
-// 定义响应数据结构
-#[derive(Serialize)]
-pub struct ApiResponse {
-    pub message: String,
-    pub status: String,
-    pub data: Option<serde_json::Value>,
-}
-
 // 用户数据结构
 #[derive(Debug, Serialize, Deserialize)]
 pub struct User {

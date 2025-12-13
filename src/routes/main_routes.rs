@@ -1,24 +1,20 @@
 use std::sync::{Arc, Mutex};
 use actix_web::{HttpResponse, Responder, web, HttpRequest};
 use log::logger;
-use crate::db::{DbPool, User, CreateUserRequest, UpdateUserRequest, ApiResponse, get_connection_or_return_error};
+use crate::db::{DbPool, User, CreateUserRequest, UpdateUserRequest, get_connection_or_return_error};
 use mysql::prelude::Queryable; 
-use serde_json;
 use serde_json::json;
 use crate::middleware::{JsonLogger, LogLevel};
 // 导入rbatis_routes模块以使用其中的方法
 use crate::routes::{rbatis_routes,auth_routes,cache_routes,redis_routes};
 // 导入其他模块需要的类型
 use serde::{Deserialize, Serialize};
-use std::time::Duration;
-use log::{info, error};
-use crate::middleware::JwtMiddleware;
-use crate::cache::Cache;
-use std::sync::Arc as StdArc;
 use crate::redis_pool;
 use crate::rbatis_pool::RBATIS_POOL;
 use rbatis::crud;
 use rbs::value::Value;
+// 导入通用的 ApiResponse
+use crate::common::ApiResponse;
 
 // 登录请求结构体
 #[derive(Debug, Deserialize)]
@@ -103,7 +99,7 @@ crud!(RbatisUser{});
 
 // 健康检查路由处理函数
 pub async fn health_check() -> impl Responder {
-    HttpResponse::Ok().json(serde_json::json!({
+    ApiResponse::success(json!({
         "status": "UP",
         "version": "1.0.0",
         "message": "Service is running normally"
@@ -124,12 +120,9 @@ pub async fn create_user(
         actix_web::error::ErrorInternalServerError(format!("Failed to insert user: {}", e))
     })?;
     
-    let response = ApiResponse {
-        message: "User created successfully".to_string(),
-        status: "success".to_string(),
-        data: None,
-    };
-    Ok(HttpResponse::Ok().json(response))
+    Ok(HttpResponse::Ok().json(ApiResponse::<serde_json::Value>::success(json!({
+        "message": "User created successfully"
+    }))))
 }
 
 // 获取所有用户处理函数
@@ -142,15 +135,9 @@ pub async fn get_users(
         actix_web::error::ErrorInternalServerError(format!("Failed to get users: {}", e))
     })?;
     
-    let response = ApiResponse {
-        message: "Users fetched successfully".to_string(),
-        status: "success".to_string(),
-        data: Some(serde_json::to_value(users).map_err(|e| {
-            actix_web::error::ErrorInternalServerError(format!("Failed to serialize users: {}", e))
-        })?),
-    };
-    
-    Ok(HttpResponse::Ok().json(response))
+    Ok(HttpResponse::Ok().json(ApiResponse::success(json!({
+        "users": users
+    }))))
 }
 
 // 根据ID获取用户处理函数
@@ -169,22 +156,12 @@ pub async fn get_user_by_id(
     
     match user {
         Some(found_user) => {
-            let response = ApiResponse {
-                message: "User fetched successfully".to_string(),
-                status: "success".to_string(),
-                data: Some(serde_json::to_value(found_user).map_err(|e| {
-                    actix_web::error::ErrorInternalServerError(format!("Failed to serialize user: {}", e))
-                })?),
-            };
-            Ok(HttpResponse::Ok().json(response))
+            Ok(HttpResponse::Ok().json(ApiResponse::success(json!({
+                "user": found_user
+            }))))
         },
         None => {
-            let response = ApiResponse {
-                message: "User not found".to_string(),
-                status: "error".to_string(),
-                data: None,
-            };
-            Ok(HttpResponse::NotFound().json(response))
+            Ok(HttpResponse::NotFound().json(ApiResponse::<serde_json::Value>::error(404, "User not found")))
         },
     }
 }
@@ -209,12 +186,7 @@ pub async fn update_user(
     })?;
     
     if existing_user.is_none() {
-        let response = ApiResponse {
-            message: "User not found".to_string(),
-            status: "error".to_string(),
-            data: None,
-        };
-        return Ok(HttpResponse::NotFound().json(response));
+        return Ok(HttpResponse::NotFound().json(ApiResponse::<serde_json::Value>::error(404, "User not found")));
     }
     
     // 执行更新
@@ -225,12 +197,9 @@ pub async fn update_user(
         actix_web::error::ErrorInternalServerError(format!("Failed to update user: {}", e))
     })?;
     
-    let response = ApiResponse {
-        message: "User updated successfully".to_string(),
-        status: "success".to_string(),
-        data: None,
-    };
-    Ok(HttpResponse::Ok().json(response))
+    Ok(HttpResponse::Ok().json(ApiResponse::<serde_json::Value>::success(json!({
+        "message": "User updated successfully"
+    }))))
 }
 
 // 删除用户处理函数
@@ -252,12 +221,7 @@ pub async fn delete_user(
     })?;
     
     if existing_user.is_none() {
-        let response = ApiResponse {
-            message: "User not found".to_string(),
-            status: "error".to_string(),
-            data: None,
-        };
-        return Ok(HttpResponse::NotFound().json(response));
+        return Ok(HttpResponse::NotFound().json(ApiResponse::<serde_json::Value>::error(404, "User not found")));
     }
     
     // 执行删除
@@ -268,12 +232,9 @@ pub async fn delete_user(
         actix_web::error::ErrorInternalServerError(format!("Failed to delete user: {}", e))
     })?;
     
-    let response = ApiResponse {
-        message: "User deleted successfully".to_string(),
-        status: "success".to_string(),
-        data: None,
-    };
-    Ok(HttpResponse::Ok().json(response))
+    Ok(HttpResponse::Ok().json(ApiResponse::<serde_json::Value>::success(json!({
+        "message": "User deleted successfully"
+    }))))
 }
 
 pub async fn json_logger(
@@ -309,8 +270,7 @@ pub async fn json_logger(
     }
 
     // 返回成功响应
-    HttpResponse::Ok().json(serde_json::json!({
-        "status": "success",
+    ApiResponse::success(json!({
         "message": "JSON日志记录成功，请查看日志文件",
         "log_file": format!("logs/app_{}.log", chrono::Local::now().format("%Y%m%d"))
     }))

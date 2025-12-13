@@ -1,77 +1,14 @@
-use actix_web::{delete, get, post, put, web, HttpRequest, HttpResponse, Responder};
+use actix_web::{delete, get, post, put, web, HttpRequest, Responder};
 use serde::Serialize;
 use serde_json::Value;
-use actix_web::body::BoxBody;
-use actix_web::http::StatusCode;
 
 use sea_orm::{ActiveModelTrait, DatabaseConnection, EntityTrait, PaginatorTrait, Set, QueryFilter, ColumnTrait, QueryOrder, QuerySelect, TransactionTrait, QueryTrait, SelectColumns, Select};
 use serde::Deserialize;
 
 use crate::entity::{ActiveModel, Entity as User, Model};
 use crate::entity::orders;
-
-#[derive(Serialize)]
-struct Meta {
-    total_items: u64,
-    total_pages: u64,
-    current_page: u64,
-    page_size: u64,
-}
-
-#[derive(Serialize)]
-struct ApiResponse<T>
-where
-    T: Serialize,
-{
-    code: u16,
-    message: String,
-    data: Option<T>,
-    meta: Option<Value>,
-}
-
-impl<T> ApiResponse<T>
-where
-    T: Serialize,
-{
-    fn success(data: T) -> Self {
-        ApiResponse {
-            code: 200,
-            message: "OK".to_string(),
-            data: Some(data),
-            meta: None,
-        }
-    }
-
-    fn success_with_meta(data: T, meta: Meta) -> Self {
-        ApiResponse {
-            code: 200,
-            message: "OK".to_string(),
-            data: Some(data),
-            meta: Some(serde_json::to_value(meta).unwrap_or(Value::Null)),
-        }
-    }
-
-    fn error(code: u16, message: impl Into<String>) -> ApiResponse<T> {
-        ApiResponse {
-            code,
-            message: message.into(),
-            data: None,
-            meta: None,
-        }
-    }
-}
-
-impl<T> Responder for ApiResponse<T>
-where
-    T: Serialize,
-{
-    type Body = BoxBody;
-
-    fn respond_to(self, _req: &HttpRequest) -> HttpResponse<BoxBody> {
-        let status = StatusCode::from_u16(self.code).unwrap_or(StatusCode::OK);
-        HttpResponse::build(status).json(self)
-    }
-}
+// 使用通用的 ApiResponse
+use crate::common::{ApiResponse, Meta};
 
 // 用于接收前端 JSON 的结构体
 #[derive(Deserialize)]

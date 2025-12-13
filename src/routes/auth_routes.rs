@@ -5,6 +5,8 @@ use std::time::Duration;
 use log::{info, error}; 
 use crate::middleware::JwtMiddleware; 
 use crate::db::{DbPool, get_connection_or_return_error}; 
+// 导入通用的 ApiResponse
+use crate::common::ApiResponse;
 
 // 登录请求结构体
 #[derive(Debug, Deserialize)]
@@ -56,27 +58,28 @@ pub async fn login(
             // 生成JWT令牌，有效期为7天
             match jwt_middleware.generate_token(user_id, phone.clone(), Duration::from_secs(7 * 24 * 60 * 60)) {
                 Ok(token) => {
-                    Ok(HttpResponse::Ok().json(LoginResponse {
+                    let login_response = LoginResponse {
                         token,
                         token_type: "Bearer".to_string(),
                         expires_in: 7 * 24 * 60 * 60, 
                         user_id,
                         phone,
-                    }))
+                    };
+                    Ok(HttpResponse::Ok().json(ApiResponse::success(login_response)))
                 },
                 Err(e) => {
                     error!("生成JWT令牌失败: {}", e);
-                    Ok(HttpResponse::InternalServerError().json(serde_json::json!({"error": "Failed to generate token"})))
+                    Ok(HttpResponse::InternalServerError().json(ApiResponse::<serde_json::Value>::error(500, "Failed to generate token")))
                 },
             }
         },
         Ok(None) => {
             error!("登录失败: 用户名或密码错误，phone={}", req.phone);
-            Ok(HttpResponse::Unauthorized().json(serde_json::json!({"error": "Invalid phone or password"})))
+            Ok(HttpResponse::Unauthorized().json(ApiResponse::<serde_json::Value>::error(401, "Invalid phone or password")))
         },
         Err(e) => {
             error!("数据库查询失败: {}", e);
-            Ok(HttpResponse::InternalServerError().json(serde_json::json!({"error": "Database error"})))
+            Ok(HttpResponse::InternalServerError().json(ApiResponse::<serde_json::Value>::error(500, "Database error")))
         },
     }
 }
@@ -92,7 +95,7 @@ pub async fn register(
     let check_query = format!("SELECT id FROM users WHERE phone = '{}' LIMIT 1", req.phone);
     
     if let Ok(Some((_id,))) = conn.query_first::<(u64,), &str>(&check_query) {
-        return Ok(HttpResponse::Conflict().json(serde_json::json!({"error": "User with this phone already exists"})));
+        return Ok(HttpResponse::Conflict().json(ApiResponse::<serde_json::Value>::error(409, "User with this phone already exists")));
     }
     
     // 创建新用户
@@ -108,23 +111,25 @@ pub async fn register(
             // 获取新创建的用户ID
             if let Ok(Some((user_id,))) = conn.query_first::<(u64,), &str>("SELECT LAST_INSERT_ID()") {
                 info!("用户注册成功: phone={}, user_id={}", req.phone, user_id);
-                return Ok(HttpResponse::Ok().json(RegisterResponse {
+                let register_response = RegisterResponse {
                     success: true,
                     user_id,
                     phone: req.phone.clone(),
-                }));
+                };
+                return Ok(HttpResponse::Ok().json(ApiResponse::success(register_response)));
             }
             
             error!("注册成功但无法获取用户ID: phone={}", req.phone);
-            Ok(HttpResponse::Ok().json(RegisterResponse {
+            let register_response = RegisterResponse {
                 success: true,
                 user_id: 0, // 无法获取ID的情况
                 phone: req.phone.clone(),
-            }))
+            };
+            Ok(HttpResponse::Ok().json(ApiResponse::success(register_response)))
         },
         Err(e) => {
             error!("用户注册失败: {}, phone={}", e, req.phone);
-            Ok(HttpResponse::InternalServerError().json(serde_json::json!({"error": "Failed to register user"})))
+            Ok(HttpResponse::InternalServerError().json(ApiResponse::<serde_json::Value>::error(500, "Failed to register user")))
         },
     }
 }
@@ -136,12 +141,13 @@ pub async fn get_current_user(req: HttpRequest) -> impl Responder {
         req.extensions().get::<u64>(),
         req.extensions().get::<String>()
     ) {
-        HttpResponse::Ok().json(serde_json::json!({
+        let user_info = serde_json::json!({
             "user_id": user_id,
             "username": username,
             "message": "This is protected data"
-        }))
+        });
+        ApiResponse::success(user_info)
     } else {
-        HttpResponse::Unauthorized().json(serde_json::json!({"error": "User not authenticated"}))
+        ApiResponse::<serde_json::Value>::error(401, "User not authenticated")
     }
 }

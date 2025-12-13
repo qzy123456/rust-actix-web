@@ -1,7 +1,9 @@
-use actix_web::{HttpResponse, Responder, web};
+use actix_web::{Responder, web};
 use serde::{Deserialize, Serialize};
 use crate::rbatis_pool::RBATIS_POOL;
 use rbatis::crud;
+// 导入通用的 ApiResponse
+use crate::common::ApiResponse;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct User {
@@ -20,7 +22,7 @@ crud!(User{});
 
 // 健康检查路由处理函数
 pub async fn rbatis_health_check() -> impl Responder {
-    HttpResponse::Ok().json(serde_json::json!({
+    ApiResponse::success(serde_json::json!({
         "status": "UP",
         "service": "rbatis",
         "message": "Rbatis service is running normally"
@@ -34,10 +36,8 @@ pub async fn rbatis_get_users() -> Result<impl Responder, actix_web::Error> {
         actix_web::error::ErrorInternalServerError(format!("Failed to get users: {}", e))
     })?;
     
-    Ok(HttpResponse::Ok().json(serde_json::json!({
-        "message": "Users fetched successfully",
-        "status": "success",
-        "data": users
+    Ok(ApiResponse::success(serde_json::json!({
+        "users": users
     })))
 }
 
@@ -51,18 +51,12 @@ pub async fn rbatis_get_user_by_id(user_id: web::Path<u64>) -> Result<impl Respo
     
     match users.first() {
         Some(found_user) => {
-            Ok(HttpResponse::Ok().json(serde_json::json!({
-                "message": "User fetched successfully",
-                "status": "success",
-                "data": found_user
+            Ok(ApiResponse::success(serde_json::json!({
+                "user": found_user
             })))
         },
         None => {
-            Ok(HttpResponse::NotFound().json(serde_json::json!({
-                "message": "User not found",
-                "status": "error",
-                "data": null
-            })))
+            Ok(ApiResponse::<serde_json::Value>::error(404, "User not found"))
         },
     }
 }
@@ -74,10 +68,8 @@ pub async fn rbatis_create_user(user: web::Json<User>) -> Result<impl Responder,
         actix_web::error::ErrorInternalServerError(format!("Failed to create user: {}", e))
     })?;
     
-    Ok(HttpResponse::Ok().json(serde_json::json!({
-        "message": "User created successfully",
-        "status": "success",
-        "data": result
+    Ok(ApiResponse::success(serde_json::json!({
+        "result": result
     })))
 }
 
@@ -94,11 +86,7 @@ pub async fn rbatis_update_user(
     })?;
     
     if users.is_empty() {
-        return Ok(HttpResponse::NotFound().json(serde_json::json!({
-            "message": "User not found",
-            "status": "error",
-            "data": null
-        })));
+        return Ok(ApiResponse::<serde_json::Value>::error(404, "User not found"));
     }
     
     // 更新用户
@@ -106,10 +94,8 @@ pub async fn rbatis_update_user(
         actix_web::error::ErrorInternalServerError(format!("Failed to update user: {}", e))
     })?;
     
-    Ok(HttpResponse::Ok().json(serde_json::json!({
-        "message": "User updated successfully",
-        "status": "success",
-        "data": result
+    Ok(ApiResponse::success(serde_json::json!({
+        "result": result
     })))
 }
 
@@ -121,9 +107,7 @@ pub async fn rbatis_delete_user(user_id: web::Path<u64>) -> Result<impl Responde
         actix_web::error::ErrorInternalServerError(format!("Failed to delete user: {}", e))
     })?;
     
-    Ok(HttpResponse::Ok().json(serde_json::json!({
-        "message": "User deleted successfully",
-        "status": "success",
-        "data": result
+    Ok(ApiResponse::success(serde_json::json!({
+        "result": result
     })))
 }

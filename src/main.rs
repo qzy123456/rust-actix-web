@@ -13,6 +13,8 @@ mod redis_pool;
 mod entity;
 // 添加 rbatis 模块
 mod rbatis_pool;
+// 添加通用响应模块
+mod common;
 
 // 从middleware模块导入必要的类型
 use middleware::{JsonLogger, JsonLoggerConfig, LogLevel, JwtMiddleware, Claims};
