@@ -4,7 +4,7 @@ use serde_json::Value;
 use actix_web::body::BoxBody;
 use actix_web::http::StatusCode;
 
-use sea_orm::{ActiveModelTrait, DatabaseConnection, EntityTrait, PaginatorTrait, Set, QueryFilter, ColumnTrait};
+use sea_orm::{ActiveModelTrait, DatabaseConnection, EntityTrait, PaginatorTrait, Set, QueryFilter, ColumnTrait, QueryOrder, QuerySelect, TransactionTrait, QueryTrait, SelectColumns, Select};
 use serde::Deserialize;
 
 use crate::entity::{ActiveModel, Entity as User, Model};
@@ -236,6 +236,289 @@ async fn get_user_with_orders(
     }
 }
 
+// --------------------------
+// 7. 按名称模糊搜索用户
+// --------------------------
+#[get("/users/search")]
+async fn search_users_by_name(
+    db: web::Data<DatabaseConnection>,
+    query: web::Query<std::collections::HashMap<String, String>>,
+) -> impl Responder {
+    let name = match query.get("name") {
+        Some(n) => n.clone(),
+        None => return ApiResponse::error(400, "Missing 'name' parameter"),
+    };
+
+    match User::find()
+        .filter(crate::entity::users::Column::Name.contains(&name))
+        .all(db.get_ref())
+        .await
+    {
+        Ok(users) => ApiResponse::success(users),
+        Err(err) => ApiResponse::error(500, err.to_string()),
+    }
+}
+
+// --------------------------
+// 8. 获取用户数量统计
+// --------------------------
+#[get("/users/stats")]
+async fn get_user_stats(db: web::Data<DatabaseConnection>) -> impl Responder {
+    match User::find().count(db.get_ref()).await {
+        Ok(count) => ApiResponse::success(serde_json::json!({ "total_users": count })),
+        Err(err) => ApiResponse::error(500, err.to_string()),
+    }
+}
+
+// --------------------------
+// 9. 批量创建用户
+// --------------------------
+#[post("/users/batch")]
+async fn create_users_batch(
+    db: web::Data<DatabaseConnection>,
+    items: web::Json<Vec<UserParams>>,
+) -> impl Responder {
+    // 注意：在实际应用中，你可能需要使用事务来确保批量操作的一致性
+    let mut created_users = Vec::new();
+    
+    for item in items.into_inner() {
+        let new_user = ActiveModel {
+            name: Set(item.name.clone()),
+            ..Default::default()
+        };
+
+        match new_user.insert(db.get_ref()).await {
+            Ok(user) => created_users.push(user),
+            Err(err) => {
+                log::error!("Failed to create user {}: {:#?}", item.name, err);
+                // 根据业务需求决定是否继续或回滚
+            }
+        }
+    }
+    
+    ApiResponse::success(created_users)
+}
+
+// --------------------------
+// 10. 获取用户列表（带排序和限制）
+// --------------------------
+#[get("/users/sorted")]
+async fn get_users_sorted(
+    db: web::Data<DatabaseConnection>,
+    query: web::Query<std::collections::HashMap<String, String>>,
+) -> impl Responder {
+    let mut query_builder = User::find();
+    
+    // 处理排序参数
+    if let Some(sort_by) = query.get("sort_by") {
+        match sort_by.as_str() {
+            "name" => {
+                if let Some(order) = query.get("order") {
+                    if order == "desc" {
+                        query_builder = query_builder.order_by(crate::entity::users::Column::Name, sea_orm::Order::Desc);
+                    } else {
+                        query_builder = query_builder.order_by(crate::entity::users::Column::Name, sea_orm::Order::Asc);
+                    }
+                } else {
+                    query_builder = query_builder.order_by(crate::entity::users::Column::Name, sea_orm::Order::Asc);
+                }
+            },
+            "id" => {
+                if let Some(order) = query.get("order") {
+                    if order == "desc" {
+                        query_builder = query_builder.order_by(crate::entity::users::Column::Id, sea_orm::Order::Desc);
+                    } else {
+                        query_builder = query_builder.order_by(crate::entity::users::Column::Id, sea_orm::Order::Asc);
+                    }
+                } else {
+                    query_builder = query_builder.order_by(crate::entity::users::Column::Id, sea_orm::Order::Asc);
+                }
+            },
+            _ => {} // 默认排序
+        }
+    }
+    
+    // 处理限制结果数量
+    if let Some(limit_str) = query.get("limit") {
+        if let Ok(limit) = limit_str.parse::<u64>() {
+            query_builder = query_builder.limit(limit);
+        }
+    }
+    
+    match query_builder.all(db.get_ref()).await {
+        Ok(users) => ApiResponse::success(users),
+        Err(err) => ApiResponse::error(500, err.to_string()),
+    }
+}
+
+// --------------------------
+// 11. 事务示例：批量删除用户
+// --------------------------
+#[delete("/users/batch")]
+async fn delete_users_batch(
+    db: web::Data<DatabaseConnection>,
+    user_ids: web::Json<Vec<u64>>,
+) -> impl Responder {
+    // 开始事务
+    let txn = match db.begin().await {
+        Ok(txn) => txn,
+        Err(err) => return ApiResponse::error(500, format!("Failed to start transaction: {}", err)),
+    };
+    
+    let ids = user_ids.into_inner();
+    let mut deleted_count = 0;
+    
+    for user_id in &ids {
+        match User::delete_by_id(*user_id).exec(&txn).await {
+            Ok(res) => deleted_count += res.rows_affected,
+            Err(err) => {
+                // 回滚事务
+                if let Err(rollback_err) = txn.rollback().await {
+                    log::error!("Failed to rollback transaction: {}", rollback_err);
+                }
+                return ApiResponse::error(500, format!("Failed to delete user {}: {}", user_id, err));
+            }
+        }
+    }
+    
+    // 提交事务
+    match txn.commit().await {
+        Ok(_) => ApiResponse::success(serde_json::json!({ 
+            "message": format!("Successfully deleted {} users", deleted_count),
+            "deleted_count": deleted_count 
+        })),
+        Err(err) => ApiResponse::error(500, format!("Failed to commit transaction: {}", err)),
+    }
+}
+
+// --------------------------
+// 12. 获取用户及其订单（使用关联查询）
+// --------------------------
+#[get("/users/{id}/orders/join")]
+async fn get_user_with_orders_join(
+    db: web::Data<DatabaseConnection>,
+    id: web::Path<u64>,
+) -> impl Responder {
+    let uid = id.into_inner();
+    
+    // 使用关联查询获取用户及其订单
+    match User::find_by_id(uid)
+        .find_with_related(crate::entity::orders::Entity)
+        .all(db.get_ref())
+        .await
+    {
+        Ok(result) => {
+            if result.is_empty() {
+                return ApiResponse::error(404, "User not found");
+            }
+            
+            let (user, orders) = result.into_iter().next().unwrap();
+            let resp = serde_json::json!({"user": user, "orders": orders});
+            ApiResponse::success(resp)
+        },
+        Err(err) => ApiResponse::error(500, err.to_string()),
+    }
+}
+
+// --------------------------
+// 13. 获取所有用户及其订单（关联查询）
+// --------------------------
+#[get("/users-with-orders")]
+async fn get_all_users_with_orders(
+    db: web::Data<DatabaseConnection>,
+) -> impl Responder {
+    // 使用关联查询获取所有用户及其订单
+    match User::find()
+        .find_with_related(crate::entity::orders::Entity)
+        .all(db.get_ref())
+        .await
+    {
+        Ok(results) => {
+            let users_with_orders: Vec<serde_json::Value> = results
+                .into_iter()
+                .map(|(user, orders)| {
+                    serde_json::json!({
+                        "user": user,
+                        "orders": orders
+                    })
+                })
+                .collect();
+                
+            ApiResponse::success(users_with_orders)
+        },
+        Err(err) => ApiResponse::error(500, err.to_string()),
+    }
+}
+
+// --------------------------
+// 14. 获取订单统计信息
+// --------------------------
+#[get("/orders/stats")]
+async fn get_orders_stats(
+    db: web::Data<DatabaseConnection>,
+) -> impl Responder {
+    // 获取订单总数
+    let total_orders = match crate::entity::orders::Entity::find().count(db.get_ref()).await {
+        Ok(count) => count,
+        Err(err) => return ApiResponse::error(500, format!("Failed to get total orders: {}", err)),
+    };
+    
+    // 获取商品总数
+    let total_goods_result: Result<Option<Option<i64>>, sea_orm::DbErr> = crate::entity::orders::Entity::find()
+        .select_only()
+        .column_as(crate::entity::orders::Column::Goods.sum(), "total_goods")
+        .into_tuple::<Option<i64>>()
+        .one(db.get_ref())
+        .await;
+        
+    let total_goods = match total_goods_result {
+        Ok(Some(sum)) => sum.unwrap_or(0),
+        Ok(None) => 0,
+        Err(err) => return ApiResponse::error(500, format!("Failed to get total goods: {}", err)),
+    };
+    
+    ApiResponse::success(serde_json::json!({
+        "total_orders": total_orders,
+        "total_goods": total_goods
+    }))
+}
+
+// --------------------------
+// 15. 条件查询用户（复合条件）
+// --------------------------
+#[get("/users/conditional")]
+async fn get_users_conditional(
+    db: web::Data<DatabaseConnection>,
+    query: web::Query<std::collections::HashMap<String, String>>,
+) -> impl Responder {
+    let mut query_builder = User::find();
+    
+    // 根据查询参数添加条件
+    if let Some(name) = query.get("name") {
+        query_builder = query_builder.filter(crate::entity::users::Column::Name.contains(name));
+    }
+    
+    if let Some(id_str) = query.get("id") {
+        if let Ok(id) = id_str.parse::<u64>() {
+            query_builder = query_builder.filter(crate::entity::users::Column::Id.eq(id));
+        }
+    }
+    
+    // 添加创建时间范围查询
+    if let (Some(start_str), Some(end_str)) = (query.get("created_after"), query.get("created_before")) {
+        if let (Ok(start), Ok(end)) = (start_str.parse::<u32>(), end_str.parse::<u32>()) {
+            // 注意：这里假设用户实体有 createTime 字段，但实际上没有
+            // 如果有相应的字段，可以添加类似下面的条件：
+            // query_builder = query_builder.filter(crate::entity::users::Column::CreateTime.between(start, end));
+        }
+    }
+    
+    match query_builder.all(db.get_ref()).await {
+        Ok(users) => ApiResponse::success(users),
+        Err(err) => ApiResponse::error(500, err.to_string()),
+    }
+}
+
 // 注册路由到 /seaorm
 pub fn config(cfg: &mut web::ServiceConfig) {
     cfg.service(
@@ -246,5 +529,15 @@ pub fn config(cfg: &mut web::ServiceConfig) {
             .service(update_user)
             .service(delete_user)
             .service(get_user_with_orders)
+            // 新增的路由
+            .service(search_users_by_name)
+            .service(get_user_stats)
+            .service(create_users_batch)
+            .service(get_users_sorted)
+            .service(delete_users_batch)
+            .service(get_user_with_orders_join)
+            .service(get_all_users_with_orders)
+            .service(get_orders_stats)
+            .service(get_users_conditional)
     );
 }

@@ -14,4 +14,15 @@ pub struct Model {
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
 pub enum Relation {}
 
+// 添加 PreloadItems 实现，支持关联查询
+impl Related<super::orders::Entity> for Entity {
+    fn to() -> RelationDef {
+        super::orders::Relation::User.def()
+    }
+    
+    fn via() -> Option<RelationDef> {
+        Some(super::orders::Relation::User.def().rev())
+    }
+}
+
 impl ActiveModelBehavior for ActiveModel {}
