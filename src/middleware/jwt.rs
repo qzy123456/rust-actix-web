@@ -136,7 +136,16 @@ where
         let path = req.path().to_string();
         let method = req.method().to_string();
         // 跳过认证的路径（如登录、注册、健康检查等）
-        if path.starts_with("/api/auth") || path.starts_with("/rbatis") || path == "/api/health" || path == "/api/logger" || path == "/auth/login" || path == "/favicon.ico"{
+        let skip_auth_paths = [
+            "/api/auth",
+            "/rbatis",
+            "/api/health",
+            "/api/logger",
+            "/auth/login",
+            "/favicon.ico"
+        ];
+
+        if skip_auth_paths.contains(&path.as_str()) {
             let fut = self.service.call(req);
             return Box::pin(async move { fut.await });
         }
