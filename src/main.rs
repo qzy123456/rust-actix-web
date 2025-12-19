@@ -19,8 +19,9 @@ mod common;
 // 从middleware模块导入必要的类型
 use middleware::{JsonLogger, JsonLoggerConfig, LogLevel, JwtMiddleware, Claims};
 use serde_json::json;
-use sea_orm::Database;
+use sea_orm::{Database, ConnectOptions};
 use std::env;
+use std::time::Duration;
 
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
@@ -112,20 +113,30 @@ async fn main() -> std::io::Result<()> {
     // 注册 MySQL 连接池为应用数据（供 auth_routes 等使用）
     let app_data_pool = web::Data::new(pool.clone());
 
-    // 尝试创建 SeaORM 数据库连接（可选），通过一次读取 `DATABASE_URL`
+    // 尝试创建 SeaORM 数据库连接池（可选），通过一次读取 `DATABASE_URL`
     dotenvy::dotenv().ok();
     let app_data_db = if let Ok(db_url) = env::var("DATABASE_URL") {
         println!("Database URL: {}", db_url);
-        match Database::connect(&db_url).await {
+        
+        // 配置连接选项
+        let mut opt = ConnectOptions::new(db_url.clone());
+        opt.max_connections(20)
+            .min_connections(5)
+            .connect_timeout(Duration::from_secs(8))
+            .idle_timeout(Duration::from_secs(8))
+            .max_lifetime(Duration::from_secs(8))
+            .sqlx_logging(true);
+            
+        match Database::connect(opt).await {
             Ok(db_conn) => {
                 if let Ok(mut logger) = json_logger.lock() {
-                    let _ = logger.info(&format!("SeaORM connected: {}", db_url));
+                    let _ = logger.info(&format!("SeaORM 连接池已建立: {}", db_url));
                 }
                 Some(web::Data::new(db_conn))
             }
             Err(e) => {
                 if let Ok(mut logger) = json_logger.lock() {
-                    let _ = logger.log_with_data(LogLevel::ERROR, "SeaORM 连接失败", json!({"error": format!("{}", e)}));
+                    let _ = logger.log_with_data(LogLevel::ERROR, "SeaORM 连接池建立失败", json!({"error": format!("{}", e)}));
                 }
                 None
             }
