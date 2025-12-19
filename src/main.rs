@@ -170,12 +170,9 @@ async fn main() -> std::io::Result<()> {
             // 注册Redis连接池作为应用数据
             .app_data(app_data_redis.clone())
             // 注册 MySQL 连接池作为应用数据
-            .app_data(app_data_pool.clone());
-
-        // 如果存在 SeaORM 连接，则注入
-        if let Some(db_data) = app_data_db.clone() {
-            app = app.app_data(db_data);
-        }
+            .app_data(app_data_pool.clone())
+            // 注册sea—orm的链接
+            .app_data(app_data_db.clone());
 
         // 配置路由
         app.configure(routes::config)
