@@ -142,6 +142,10 @@ where
             "/api/health",
             "/api/logger",
             "/auth/login",
+            "/files",  // 文件上传根路径
+            "/files/upload",  // 单文件上传
+            "/files/upload/batch",  // 批量文件上传
+            "/files/list",  // 文件列表
             "/favicon.ico"
         ];
 
