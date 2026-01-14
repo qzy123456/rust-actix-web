@@ -6,7 +6,7 @@ use serde::{Serialize, Deserialize};
 use serde_json; 
 use std::sync::{Arc, Mutex}; 
 use std::fmt; 
-
+use std::default::Default;
 // 日志级别枚举
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord)]
 pub enum LogLevel {
@@ -53,7 +53,7 @@ pub struct JsonLoggerConfig {
 impl Default for JsonLoggerConfig {
     fn default() -> Self {
         Self {
-            log_dir: String::from("logs"),
+            log_dir: "logs".to_string(),
             max_file_size_mb: 10,
             min_level: LogLevel::INFO,
         }
