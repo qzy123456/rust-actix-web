@@ -22,9 +22,9 @@ base64 = "0.21.0"
 dotenvy = "0.15"
 deadpool-redis = "0.13.0"
 redis = { version = "0.24.0", features = ["tokio-comp"] }
-rbs = { version = "4.5"}
-rbatis = { version = "4.5"}
-rbdc-mysql={version="4.5"}
+rbs = { version = "4.5" }
+rbatis = { version = "4.5" }
+rbdc-mysql = { version = "4.5" }
 tokio = { version = "1", features = ["full"] }
 fast_log = "1.6"
 lazy_static = "1.4.0"
@@ -32,11 +32,13 @@ lazy_static = "1.4.0"
 # SeaORM and helpers (for new seaorm-based routes)
 [dependencies.sea-orm]
 version = "0.12"
-features = [
-	"sqlx-mysql",
-	"runtime-tokio-native-tls",
-	"macros"
-]
+features = ["sqlx-mysql", "runtime-tokio-native-tls", "macros"]
+
+# SQLx 直接使用方式
+[dependencies.sqlx]
+version = "0.7"
+default-features = false
+features = ["runtime-tokio", "mysql", "chrono", "macros"]
 
 [build]
-incremental = true  # 增量编译
+incremental = true # 增量编译
