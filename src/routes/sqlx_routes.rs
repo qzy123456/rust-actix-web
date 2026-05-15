@@ -56,9 +56,9 @@ async fn add_user(
     item: web::Json<UserParams>,
 ) -> impl Responder {
     let sql = "INSERT INTO users (name) VALUES (?)";
-    
+    let items = item.into_inner();
     match sqlx::query(sql)
-        .bind(&item.name)
+        .bind(&items.name)
         .execute(pool.get_ref())
         .await
     {
@@ -66,7 +66,7 @@ async fn add_user(
             let id = result.last_insert_id();
             ApiResponse::success(serde_json::json!({
                 "id": id,
-                "name": item.name.clone()
+                "name": items.name.clone()
             }))
         }
         Err(err) => {
@@ -98,8 +98,9 @@ async fn get_users_page(
     pool: web::Data<MySqlPool>,
     params: web::Query<PageParams>,
 ) -> impl Responder {
-    let page = params.page.unwrap_or(1);
-    let page_size = params.page_size.unwrap_or(10);
+    let params_inner = params.into_inner();
+    let page = params_inner.page.unwrap_or(1);
+    let page_size = params_inner.page_size.unwrap_or(10);
     let offset = (page - 1) * page_size;
     
     // 查询数据
@@ -141,9 +142,9 @@ async fn update_user(
 ) -> impl Responder {
     let user_id = id.into_inner();
     let sql = "UPDATE users SET name = ? WHERE id = ?";
-    
+    let items = item.into_inner();
     match sqlx::query(sql)
-        .bind(&item.name)
+        .bind(&items.name)
         .bind(user_id)
         .execute(pool.get_ref())
         .await
@@ -152,7 +153,7 @@ async fn update_user(
             if result.rows_affected() > 0 {
                 ApiResponse::success(serde_json::json!({
                     "id": user_id,
-                    "name": item.name.clone()
+                    "name": items.name.clone()
                 }))
             } else {
                 ApiResponse::error(404, "User not found")
@@ -287,25 +288,24 @@ async fn delete_users_batch(
     pool: web::Data<MySqlPool>,
     user_ids: web::Json<Vec<u64>>,
 ) -> impl Responder {
-    let ids = user_ids.into_inner();
+    let ids: Vec<u64> = user_ids.into_inner();   // 明确类型
     if ids.is_empty() {
         return ApiResponse::error(400, "Empty user ids list");
     }
-    
+
     let mut tx = match pool.begin().await {
         Ok(tx) => tx,
         Err(err) => return ApiResponse::error(500, format!("Failed to start transaction: {}", err)),
     };
-    
-    let mut deleted_count = 0u64;
-    let placeholders: Vec<String> = ids.iter().map(|_| "?".to_string()).collect();
+
+    let placeholders = vec!["?".to_string(); ids.len()];
     let sql = format!("DELETE FROM users WHERE id IN ({})", placeholders.join(","));
-    
+
     let mut query = sqlx::query(&sql);
     for id in &ids {
         query = query.bind(id);
     }
-    
+    let deleted_count;
     match query.execute(&mut *tx).await {
         Ok(result) => deleted_count = result.rows_affected(),
         Err(err) => {
