@@ -71,15 +71,16 @@ pub async fn redis_set(
     redis_pool: web::Data<redis_pool::RedisPool>,
 ) -> Result<impl Responder, actix_web::Error> {
     // 获取请求体中的参数
-    let key = &req.key;
-    let value = &req.value;
-    let expiry_seconds = req.expiry_seconds.unwrap_or(3600); // 默认过期时间为1小时
+    let request: RedisSetRequest = req.into_inner();
+    let key = request.key;
+    let value = request.value;
+    let expiry_seconds = request.expiry_seconds.unwrap_or(3600); // 默认过期时间为1小时
     
     // 获取Redis连接
     let mut conn = redis_pool::get_redis_connection_or_return_error(&redis_pool).await?;
     
     // 设置键值对，带过期时间
-    if let Err(e) = redis_pool::set_with_expiry(&mut conn, key, value, expiry_seconds).await {
+    if let Err(e) = redis_pool::set_with_expiry(&mut conn, &key, &value, expiry_seconds).await {
         let response = RedisResponse {
             status: "error".to_string(),
             message: format!("Failed to set key '{}': {}", key, e),

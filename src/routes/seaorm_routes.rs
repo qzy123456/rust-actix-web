@@ -1,10 +1,11 @@
+use std::default::Default;
 use actix_web::{delete, get, post, put, web, HttpRequest, Responder};
+use mysql::params;
 use serde::Serialize;
 use serde_json::Value;
 
-use sea_orm::{ActiveModelTrait, DatabaseConnection, EntityTrait, PaginatorTrait, Set, QueryFilter, ColumnTrait, QueryOrder, QuerySelect, TransactionTrait, QueryTrait, SelectColumns, Select};
+use sea_orm::{ActiveValue, ActiveModelTrait, DatabaseConnection, EntityTrait, PaginatorTrait, Set, NotSet, QueryFilter, ColumnTrait, QueryOrder, QuerySelect, TransactionTrait, QueryTrait, SelectColumns, Select, IntoActiveModel};
 use serde::Deserialize;
-
 use crate::entity::{ActiveModel, Entity as User, Model};
 use crate::entity::orders;
 // 使用通用的 ApiResponse
@@ -31,9 +32,10 @@ async fn add_user(
     db: web::Data<DatabaseConnection>,
     item: web::Json<UserParams>,
 ) -> impl Responder {
+    let items = item.into_inner();
     let new_user = ActiveModel {
-        name: Set(item.name.clone()),
-        ..Default::default()
+        name: Set(items.name.clone()),
+        id: NotSet,
     };
 
     match new_user.insert(db.get_ref()).await {
@@ -67,9 +69,10 @@ async fn get_users_page(
     db: web::Data<DatabaseConnection>,
     params: web::Query<PageParams>,
 ) -> impl Responder {
+    let paramss = params.into_inner();
     // 默认第 1 页，每页 10 条
-    let page = params.page.unwrap_or(1);
-    let page_size = params.page_size.unwrap_or(10);
+    let page = paramss.page.unwrap_or(1);
+    let page_size = paramss.page_size.unwrap_or(10);
 
     // SeaORM 的分页器
     let paginator = User::find().paginate(db.get_ref(), page_size);
@@ -106,12 +109,12 @@ async fn update_user(
 ) -> impl Responder {
     // 先查找是否存在
     let user_opt = User::find_by_id(id.into_inner()).one(db.get_ref()).await;
-
+    let items = item.into_inner();
     match user_opt {
         Ok(Some(user)) => {
             // 将 Model 转换为 ActiveModel 以进行更新
-            let mut active_user: ActiveModel = user.into();
-            active_user.name = Set(item.name.clone());
+            let mut active_user: ActiveModel = user.into_active_model();
+            active_user.name = Set(items.name.clone());
 
             match active_user.update(db.get_ref()).await {
                 Ok(updated_user) => ApiResponse::success(updated_user),
@@ -221,7 +224,7 @@ async fn create_users_batch(
     for item in items.into_inner() {
         let new_user = ActiveModel {
             name: Set(item.name.clone()),
-            ..Default::default()
+            id: NotSet,
         };
 
         match new_user.insert(db.get_ref()).await {

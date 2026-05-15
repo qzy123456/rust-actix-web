@@ -41,8 +41,8 @@ pub fn init_redis_pool() -> Result<RedisPool, Box<dyn std::error::Error>> {
 // 设置带过期时间的键值对
 pub async fn set_with_expiry(
     conn: &mut Connection,
-    key: &str,
-    value: &str,
+    key: &String,
+    value: &String,
     expiry_seconds: u64
 ) -> Result<(), Box<dyn std::error::Error>> {
     let _: () = cmd("SET")
@@ -58,7 +58,7 @@ pub async fn set_with_expiry(
 // 获取键值
 pub async fn get(
     conn: &mut Connection,
-    key: &str
+    key: &String
 ) -> Result<Option<String>, Box<dyn std::error::Error>> {
     let result: Option<String> = cmd("GET")
         .arg(key)
